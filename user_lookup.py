@@ -110,23 +110,43 @@ def process_ids():
 root = tk.Tk()
 root.title("Domain Fullname Extractor")
 
-tk.Label(root, text="Paste IDs (one per line):").pack()
-text_area = scrolledtext.ScrolledText(root, width=40, height=10)
-text_area.pack()
+# Paste IDs label and text area
+label_ids = tk.Label(root, text="Paste IDs (one per line):")
+label_ids.pack()
+text_area = scrolledtext.ScrolledText(root, width=40, height=10, borderwidth=1, relief="solid")
+text_area.pack(pady=(0, 8))
 
-tk.Label(root, text="Country Code (e.g. KE, RW, TZ, ZM, SC)\nSeparated by comma or space:").pack()
+# Country code label and entry (thinner border, smaller width)
+frame_country = tk.Frame(root)
+frame_country.pack(pady=(0, 8))
+label_country = tk.Label(frame_country, text="Country Code(s):")
+label_country.pack(side=tk.LEFT)
 country_code_var = tk.StringVar()
-country_code_entry = tk.Entry(root, textvariable=country_code_var)
-country_code_entry.pack()
+country_code_entry = tk.Entry(frame_country, textvariable=country_code_var, width=10, borderwidth=1, relief="solid")
+country_code_entry.pack(side=tk.LEFT, padx=(4, 0))
+label_hint = tk.Label(frame_country, text="(e.g. KE, RW, TZ)", font=("Arial", 8))
+label_hint.pack(side=tk.LEFT, padx=(6, 0))
 
-
-tk.Button(root, text="Extract Fullnames", command=process_ids).pack()
+# Button with proper space
+button_frame = tk.Frame(root)
+button_frame.pack(pady=(0, 10))
+extract_btn = tk.Button(button_frame, text="Extract Fullnames", command=process_ids, width=18)
+extract_btn.pack()
 
 columns = ("ID", "Fullname", "LocalGroups", "GlobalGroups")
-tree = ttk.Treeview(root, columns=columns, show="headings", height=10)
+tree_frame = tk.Frame(root)
+tree_frame.pack(pady=(0, 8), fill=tk.BOTH, expand=True)
+tree_scroll_y = tk.Scrollbar(tree_frame, orient=tk.VERTICAL)
+tree_scroll_x = tk.Scrollbar(tree_frame, orient=tk.HORIZONTAL)
+tree = ttk.Treeview(tree_frame, columns=columns, show="headings", height=20, yscrollcommand=tree_scroll_y.set, xscrollcommand=tree_scroll_x.set)
+tree_scroll_y.config(command=tree.yview)
+tree_scroll_x.config(command=tree.xview)
+tree_scroll_y.pack(side=tk.RIGHT, fill=tk.Y)
+tree_scroll_x.pack(side=tk.BOTTOM, fill=tk.X)
+tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 for col in columns:
     tree.heading(col, text=col)
     tree.column(col, width=150)
-tree.pack()
+tree.pack(pady=(0, 8))
 
 root.mainloop()

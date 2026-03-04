@@ -2,8 +2,10 @@ import pandas as pd
 import subprocess
 import tkinter as tk
 from tkinter import ttk, scrolledtext, messagebox
-import os
 import re
+import ctypes
+import locale
+import unicodedata
 
 # =========================
 # CONFIG
@@ -14,10 +16,10 @@ HOSTNAME_COL = "Hostname"
 OUTPUT_FILE = "output.xlsx"
 
 PRIMARY_BG = "#FFFFFF"  # White background
-ACCENT_RED = "#D32F2F"  # Red for border strips
+ACCENT_RED = "#D32F2F"  # Red for borders
 TEXT_COLOR = "#222222"
 SUBTEXT_COLOR = "#555555"
-FONT_FAMILY = "Segoe UI"  # Looks good on Windows
+FONT_FAMILY = "Segoe UI"
 BASE_PAD = 10
 
 
@@ -28,32 +30,76 @@ def extract_valid_ids(df, col):
     # Defensive copy to avoid SettingWithCopy warnings
     df = df.copy()
     df = df[df[col].notnull() & (df[col].astype(str).str.strip() != "")]
-    df[col] = df[col].astype(str).str.extract(r"(\d+)", expand=False)
+    # Extract first sequence of digits with at least 4 digits, take first 8 digits only
+    df[col] = (
+        df[col]
+        .astype(str)
+        .str.extract(r"(\d{4,})", expand=False)
+        .str.slice(0, 7)
+    )
+    # Only keep IDs with at least 4 digits
     return (
-        df[df[col].notnull() & df[col].astype(str).str.match(r"^\d{6,}$")][col]
+        df[df[col].notnull() & df[col].astype(str).str.match(r"^\d{4,}$")][col]
         .astype(str)
         .unique()
+        .str.slice(0, 7)
     )
+
+# ---- Unicode-safe decoding for `net user` output ----
+def _decode_net_output(raw: bytes) -> str:
+    # 1) Try the current console output code page (OEM)
+    try:
+        cp = ctypes.windll.kernel32.GetConsoleOutputCP()
+        if cp:
+            enc = f"cp{cp}"
+            text = raw.decode(enc, errors="strict")
+            return unicodedata.normalize("NFC", text)
+    except Exception:
+        pass
+
+    # 2) Preferred system encoding + common fallbacks
+    fallbacks = [
+        locale.getpreferredencoding(False),
+        "mbcs",      # Windows ANSI code page for the locale
+        "cp65001",   # UTF-8 (Windows name)
+        "utf-8",
+        "cp1252",    # Western Windows
+        "cp850",     # OEM multilingual
+        "cp437",     # OEM US
+    ]
+    tried = set()
+    for enc in fallbacks:
+        if not enc:
+            continue
+        enc_l = enc.lower()
+        if enc_l in tried:
+            continue
+        tried.add(enc_l)
+        try:
+            text = raw.decode(enc, errors="strict")
+            return unicodedata.normalize("NFC", text)
+        except Exception:
+            continue
+
+    # 3) Last resort: decode with replacement (better than crashing)
+    try:
+        text = raw.decode("mbcs", errors="replace")
+    except Exception:
+        text = raw.decode(errors="replace")
+    return unicodedata.normalize("NFC", text)
 
 
 def get_user_info(user_id):
-    """
-    Query AD via 'net user /domain {user_id}' and parse:
-    - Full Name
-    - Local Group Memberships
-    - Global Group memberships
-    Gracefully handles odd encodings and missing fields.
-    """
     try:
+        # Capture BYTES; we will decode ourselves.
+        # Using cmd /c preserves Windows behavior of 'net' (OEM CP).
         result = subprocess.run(
-            ["net", "user", "/domain", user_id],
+            ["cmd", "/c", f"net user /domain {user_id}"],
             capture_output=True,
-            text=True,
             check=True,
-            encoding="utf-8",
-            errors="replace",
         )
-        output = result.stdout
+        output = _decode_net_output(result.stdout)
+
         fullname = ""
         local_groups = []
         global_groups = []
@@ -109,20 +155,14 @@ def apply_base_style(root):
     root.configure(bg=PRIMARY_BG)
 
     style = ttk.Style()
-    # Use a platform-appropriate theme and then override
     try:
         style.theme_use("clam")
     except Exception:
         pass
 
-    style.configure(
-        "App.TFrame",
-        background=PRIMARY_BG,
-    )
-    style.configure(
-        "Card.TFrame",
-        background=PRIMARY_BG,
-    )
+    style.configure("App.TFrame", background=PRIMARY_BG)
+    style.configure("Card.TFrame", background=PRIMARY_BG)
+
     style.configure(
         "App.TLabel",
         background=PRIMARY_BG,
@@ -146,12 +186,9 @@ def apply_base_style(root):
         font=(FONT_FAMILY, 10, "semibold"),
         padding=6,
     )
-    style.map(
-        "App.TButton",
-        background=[("active", "#efefef")],
-    )
+    style.map("App.TButton", background=[("active", "#efefef")])
 
-    # Treeview styles (headers + rows)
+    # Treeview
     style.configure(
         "App.Treeview",
         background="#FFFFFF",
@@ -168,19 +205,43 @@ def apply_base_style(root):
         font=(FONT_FAMILY, 10, "bold"),
         borderwidth=0,
     )
-    style.map("App.Treeview", background=[("selected", "#FFE5E5")])  # subtle red hue
+    style.map("App.Treeview", background=[("selected", "#FFE5E5")])
 
 
-def bordered_frame(parent, padding=8):
+def thin_bordered_frame(parent, padding=8):
     """
-    Create a white 'card' with a thin red strip/border around it:
-    - Outer frame: red (thin)
-    - Inner frame: white, where content lives
+    Create a white 'card' that has a thin (1px) red border using highlight.
+    No red blocks, just a crisp outline.
     """
-    outer = tk.Frame(parent, bg=ACCENT_RED, highlightthickness=0, bd=0)
-    inner = tk.Frame(outer, bg=PRIMARY_BG, highlightthickness=0, bd=0)
+    frame = tk.Frame(
+        parent,
+        bg=PRIMARY_BG,
+        highlightbackground=ACCENT_RED,
+        highlightcolor=ACCENT_RED,
+        highlightthickness=1,
+        bd=0,
+    )
+    inner = tk.Frame(frame, bg=PRIMARY_BG, bd=0, highlightthickness=0)
     inner.pack(padx=padding, pady=padding, fill="both", expand=True)
-    return outer, inner
+    return frame, inner
+
+
+def thin_border_widget(widget):
+    """
+    Apply a thin red border to native Tk widgets (Entry, Text, Frame).
+    ttk widgets don't support highlight params directly, so we wrap them.
+    """
+    try:
+        widget.configure(
+            highlightbackground=ACCENT_RED,
+            highlightcolor=ACCENT_RED,
+            highlightthickness=1,
+            bd=0,
+            relief="flat",
+        )
+    except tk.TclError:
+        # Some widgets (e.g., ttk) don't take these options
+        pass
 
 
 # =========================
@@ -191,7 +252,6 @@ def process_ids():
     root.update_idletasks()
 
     ids = text_area.get("1.0", tk.END).strip().splitlines()
-    # Accept multiple country codes separated by comma or space
     raw_codes = country_code_var.get().strip().upper()
     selected_codes = [code.strip() for code in re.split(r",|\s", raw_codes) if code.strip()]
 
@@ -208,7 +268,6 @@ def process_ids():
         fullname, local_groups, global_groups = get_user_info(user_id)
 
         if not selected_codes:
-            # No country code input, show all
             results.append(
                 {
                     "ID": user_id,
@@ -217,13 +276,8 @@ def process_ids():
                     "GlobalGroups": ", ".join(global_groups),
                 }
             )
-            tree.insert(
-                "",
-                "end",
-                values=(user_id, fullname, ", ".join(local_groups), ", ".join(global_groups)),
-            )
+            tree.insert("", "end", values=(user_id, fullname, ", ".join(local_groups), ", ".join(global_groups)))
         else:
-            # Filter based on any selected country code
             if has_code(local_groups, selected_codes) or has_code(global_groups, selected_codes):
                 filtered_local = [g for g in local_groups if any(code in g for code in selected_codes)]
                 filtered_global = [g for g in global_groups if any(code in g for code in selected_codes)]
@@ -235,15 +289,10 @@ def process_ids():
                         "GlobalGroups": ", ".join(filtered_global),
                     }
                 )
-                tree.insert(
-                    "",
-                    "end",
-                    values=(user_id, fullname, ", ".join(filtered_local), ", ".join(filtered_global)),
-                )
+                tree.insert("", "end", values=(user_id, fullname, ", ".join(filtered_local), ", ".join(filtered_global)))
 
         root.update_idletasks()
 
-    # Save results
     try:
         out_df = pd.DataFrame(results)
         out_df.to_excel(OUTPUT_FILE, index=False, engine="openpyxl")
@@ -267,33 +316,28 @@ apply_base_style(root)
 container = ttk.Frame(root, style="App.TFrame", padding=BASE_PAD)
 container.pack(fill="both", expand=True)
 
-# Title/Header
-title_bar_outer, title_bar = bordered_frame(container, padding=8)
-title_bar_outer.pack(fill="x", pady=(0, BASE_PAD))
-ttk.Label(title_bar, text="Domain Fullname Extractor", style="Title.TLabel").pack(anchor="w")
+# Title/Header (thin border)
+title_card, title_inner = thin_bordered_frame(container, padding=8)
+title_card.pack(fill="x", pady=(0, BASE_PAD))
+ttk.Label(title_inner, text="Domain Fullname Extractor", style="Title.TLabel").pack(anchor="w")
 ttk.Label(
-    title_bar,
+    title_inner,
     text="Paste IDs, optionally filter by country codes (KE, RW, TZ, ZM, SC, etc.), then extract.",
     style="Hint.TLabel",
 ).pack(anchor="w", pady=(2, 0))
 
-# Top controls (IDs + Country + Button)
-top_outer, top = bordered_frame(container, padding=12)
-top_outer.pack(fill="x", pady=(0, BASE_PAD))
+# Top controls (IDs + Country + Button) — thin border
+top_card, top = thin_bordered_frame(container, padding=12)
+top_card.pack(fill="x", pady=(0, BASE_PAD))
 
-# IDs block
+# IDs block (left)
 ids_col = ttk.Frame(top, style="Card.TFrame")
 ids_col.grid(row=0, column=0, sticky="nsew", padx=(0, BASE_PAD))
 ttk.Label(ids_col, text="Paste IDs (one per line):", style="App.TLabel").pack(anchor="w", pady=(0, 4))
 
-# Scrolled text with white bg, subtle border
-text_area_frame = tk.Frame(ids_col, bg=ACCENT_RED)
-text_area_frame.pack(fill="both", expand=True)
-text_area_inner = tk.Frame(text_area_frame, bg=PRIMARY_BG)
-text_area_inner.pack(padx=2, pady=2, fill="both", expand=True)
-
+# Scrolled text with thin red border
 text_area = scrolledtext.ScrolledText(
-    text_area_inner,
+    ids_col,
     width=40,
     height=10,
     bg=PRIMARY_BG,
@@ -302,16 +346,14 @@ text_area = scrolledtext.ScrolledText(
     relief="flat",
     font=(FONT_FAMILY, 10),
 )
+thin_border_widget(text_area)
 text_area.pack(fill="both", expand=True)
 
-# Country codes + button
+# Right column (Country + Button)
 right_col = ttk.Frame(top, style="Card.TFrame")
 right_col.grid(row=0, column=1, sticky="nsew")
-ttk.Label(
-    right_col,
-    text="Country Code(s)",
-    style="App.TLabel",
-).pack(anchor="w", pady=(0, 4))
+
+ttk.Label(right_col, text="Country Code(s)", style="App.TLabel").pack(anchor="w", pady=(0, 4))
 ttk.Label(
     right_col,
     text="Example: KE, RW, TZ, ZM, SC (use comma or space)",
@@ -319,13 +361,12 @@ ttk.Label(
 ).pack(anchor="w", pady=(0, 6))
 
 country_code_var = tk.StringVar()
-entry_outer = tk.Frame(right_col, bg=ACCENT_RED)
-entry_outer.pack(fill="x", pady=(0, 10))
-entry_inner = tk.Frame(entry_outer, bg=PRIMARY_BG)
-entry_inner.pack(padx=2, pady=2, fill="x")
 
+# Entry with thin red border
+entry_holder = tk.Frame(right_col, bg=PRIMARY_BG)
+entry_holder.pack(fill="x", pady=(0, 10))
 country_code_entry = tk.Entry(
-    entry_inner,
+    entry_holder,
     textvariable=country_code_var,
     bg=PRIMARY_BG,
     fg=TEXT_COLOR,
@@ -333,25 +374,33 @@ country_code_entry = tk.Entry(
     font=(FONT_FAMILY, 10),
     insertbackground=TEXT_COLOR,
 )
+thin_border_widget(country_code_entry)
 country_code_entry.pack(fill="x")
 
-extract_button_outer = tk.Frame(right_col, bg=ACCENT_RED)
-extract_button_outer.pack(anchor="w")
-extract_button_inner = tk.Frame(extract_button_outer, bg=PRIMARY_BG)
-extract_button_inner.pack(padx=2, pady=2)
+# Button (ttk)
+extract_button = ttk.Button(right_col, text="Extract Fullnames", style="App.TButton", width=18, command=process_ids)
+extract_button.pack(anchor="w")
 
-extract_button = ttk.Button(extract_button_inner, text="Extract Fullnames", style="App.TButton", command=process_ids)
-extract_button.pack()
-
-# Treeview section
-table_outer, table_wrap = bordered_frame(container, padding=10)
-table_outer.pack(fill="both", expand=True)
+# Treeview section — thin border around the whole table
+table_card, table_wrap = thin_bordered_frame(container, padding=10)
+table_card.pack(fill="both", expand=True)
 
 columns = ("ID", "Fullname", "LocalGroups", "GlobalGroups")
-tree = ttk.Treeview(table_wrap, columns=columns, show="headings", height=10, style="App.Treeview")
+
+# Holder for tree + scrollbars
+table_holder = tk.Frame(table_wrap, bg=PRIMARY_BG)
+table_holder.pack(fill="both", expand=True)
+
+# Create tree inside table_holder
+tree = ttk.Treeview(
+    table_holder,
+    columns=columns,
+    show="headings",
+    height=10,
+    style="App.Treeview",
+)
 for col in columns:
     tree.heading(col, text=col)
-    # Wider columns for better readability
     if col == "ID":
         tree.column(col, width=120, anchor="w")
     elif col == "Fullname":
@@ -359,35 +408,17 @@ for col in columns:
     else:
         tree.column(col, width=260, anchor="w")
 
-# Scrollbars with the same bordered look
-scroll_holder = tk.Frame(table_wrap, bg=PRIMARY_BG)
-scroll_holder.pack(fill="both", expand=True)
-
-tree_frame = tk.Frame(scroll_holder, bg=PRIMARY_BG)
-tree_frame.grid(row=0, column=0, sticky="nsew")
-
-vs_outer = tk.Frame(scroll_holder, bg=ACCENT_RED)
-vs_outer.grid(row=0, column=1, sticky="ns", padx=(6, 0))
-vs_inner = tk.Frame(vs_outer, bg=PRIMARY_BG)
-vs_inner.pack(padx=2, pady=2, fill="y")
-
-hs_outer = tk.Frame(scroll_holder, bg=ACCENT_RED)
-hs_outer.grid(row=1, column=0, sticky="ew", pady=(6, 0))
-hs_inner = tk.Frame(hs_outer, bg=PRIMARY_BG)
-hs_inner.pack(padx=2, pady=2, fill="x")
-
-yscroll = ttk.Scrollbar(vs_inner, orient="vertical", command=tree.yview)
-xscroll = ttk.Scrollbar(hs_inner, orient="horizontal", command=tree.xview)
+# Scrollbars (plain ttk; no red blocks)
+yscroll = ttk.Scrollbar(table_holder, orient="vertical", command=tree.yview)
+xscroll = ttk.Scrollbar(table_holder, orient="horizontal", command=tree.xview)
 tree.configure(yscrollcommand=yscroll.set, xscrollcommand=xscroll.set)
 
-tree.grid(row=0, column=0, sticky="nsew")
-yscroll.pack(fill="y", expand=True)
-xscroll.pack(fill="x", expand=True)
+# Pack: tree left, vertical scrollbar to its right, horizontal at bottom
+tree.pack(side="left", fill="both", expand=True)
+yscroll.pack(side="left", fill="y", padx=(6, 0))
+xscroll.pack(side="bottom", fill="x", pady=(6, 0))
 
-scroll_holder.grid_rowconfigure(0, weight=1)
-scroll_holder.grid_columnconfigure(0, weight=1)
-
-# Responsive weights
+# Make the top grid columns responsive
 top.grid_columnconfigure(0, weight=3)
 top.grid_columnconfigure(1, weight=2)
 
