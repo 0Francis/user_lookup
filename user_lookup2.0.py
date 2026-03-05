@@ -7,25 +7,19 @@ import ctypes
 import locale
 import unicodedata
 
-# =========================
-# CONFIG
-# =========================
 RAW_FILE = r"c:\Users\23225632\Downloads\Kenya Offrole & CWK Dump_27 FEB.xlsx"
 SHEET_NAME = "Sheet5"
 HOSTNAME_COL = "Hostname"
 OUTPUT_FILE = "output.xlsx"
 
-PRIMARY_BG = "#FFFFFF"  # White background
-ACCENT_RED = "#D32F2F"  # Red for borders
+PRIMARY_BG = "#FFFFFF"
+ACCENT_RED = "#D32F2F"
 TEXT_COLOR = "#222222"
 SUBTEXT_COLOR = "#555555"
 FONT_FAMILY = "Segoe UI"
 BASE_PAD = 10
 
 
-# =========================
-# DATA HELPERS
-# =========================
 def extract_valid_ids(df, col):
     # Defensive copy to avoid SettingWithCopy warnings
     df = df.copy()
@@ -60,12 +54,12 @@ def _decode_net_output(raw: bytes) -> str:
     # 2) Preferred system encoding + common fallbacks
     fallbacks = [
         locale.getpreferredencoding(False),
-        "mbcs",      # Windows ANSI code page for the locale
-        "cp65001",   # UTF-8 (Windows name)
+        "mbcs",
+        "cp65001",
         "utf-8",
-        "cp1252",    # Western Windows
-        "cp850",     # OEM multilingual
-        "cp437",     # OEM US
+        "cp1252",
+        "cp850",
+        "cp437",
     ]
     tried = set()
     for enc in fallbacks:
@@ -91,8 +85,7 @@ def _decode_net_output(raw: bytes) -> str:
 
 def get_user_info(user_id):
     try:
-        # Capture BYTES; we will decode ourselves.
-        # Using cmd /c preserves Windows behavior of 'net' (OEM CP).
+        # Capture BYTES and decode ourselves for Windows compatibility.
         result = subprocess.run(
             ["cmd", "/c", f"net user /domain {user_id}"],
             capture_output=True,
@@ -148,9 +141,6 @@ def get_user_info(user_id):
         return "", [], []
 
 
-# =========================
-# UI HELPERS (STYLING)
-# =========================
 def apply_base_style(root):
     root.configure(bg=PRIMARY_BG)
 
@@ -227,10 +217,6 @@ def thin_bordered_frame(parent, padding=8):
 
 
 def thin_border_widget(widget):
-    """
-    Apply a thin red border to native Tk widgets (Entry, Text, Frame).
-    ttk widgets don't support highlight params directly, so we wrap them.
-    """
     try:
         widget.configure(
             highlightbackground=ACCENT_RED,
@@ -244,9 +230,6 @@ def thin_border_widget(widget):
         pass
 
 
-# =========================
-# APP LOGIC
-# =========================
 def process_ids():
     extract_button.config(state="disabled", text="Working…")
     root.update_idletasks()
@@ -303,9 +286,6 @@ def process_ids():
     extract_button.config(state="normal", text="Extract Fullnames")
 
 
-# =========================
-# UI CONSTRUCTION
-# =========================
 root = tk.Tk()
 root.title("Domain Fullname Extractor")
 root.geometry("900x600")
