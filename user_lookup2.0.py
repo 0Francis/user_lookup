@@ -230,8 +230,16 @@ def thin_border_widget(widget):
         pass
 
 
+def request_cancel():
+    global cancel_requested
+    cancel_requested = True
+
+
 def process_ids():
+    global cancel_requested
+    cancel_requested = False
     extract_button.config(state="disabled", text="Working…")
+    cancel_button.config(state="normal")
     root.update_idletasks()
 
     ids = text_area.get("1.0", tk.END).strip().splitlines()
@@ -245,6 +253,8 @@ def process_ids():
         return any(any(code in g for code in codes) for g in groups)
 
     for user_id in ids:
+        if cancel_requested:
+            break
         if not user_id.strip():
             continue
 
@@ -284,6 +294,8 @@ def process_ids():
         messagebox.showerror("Save Error", f"Could not save to {OUTPUT_FILE}\n\n{e}")
 
     extract_button.config(state="normal", text="Extract Fullnames")
+    cancel_button.config(state="disabled")
+    root.update_idletasks()
 
 
 root = tk.Tk()
@@ -358,8 +370,11 @@ thin_border_widget(country_code_entry)
 country_code_entry.pack(fill="x")
 
 # Button (ttk)
-extract_button = ttk.Button(right_col, text="Extract Fullnames", style="App.TButton", width=18, command=process_ids)
-extract_button.pack(anchor="w")
+extract_button = ttk.Button(right_col, text="Extract Fullnames", command=process_ids)
+extract_button.pack(pady=(10, 0), anchor="center")
+
+cancel_button = ttk.Button(right_col, text="Cancel Extraction", command=request_cancel, state="disabled")
+cancel_button.pack(pady=(2, 0), anchor="center")
 
 # Treeview section — thin border around the whole table
 table_card, table_wrap = thin_bordered_frame(container, padding=10)
