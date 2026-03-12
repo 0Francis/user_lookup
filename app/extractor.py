@@ -1,3 +1,4 @@
+import os
 import re
 import subprocess
 from typing import Callable, Generator
@@ -97,16 +98,42 @@ class UserExtractor:
                         return s.split(":", 1)[1].strip()
             return "Not found or blank"
         except subprocess.CalledProcessError as e:
-            return f"AD error: {e}"
+            _AD_ERRORS = {
+                2: "User not found in domain",
+                1: "Not in domain or access denied",
+            }
+            return _AD_ERRORS.get(e.returncode, f"AD lookup failed (code {e.returncode})")
         except ExtractionCancelledError:
             raise
         except Exception as e:
-            return f"Unexpected error: {e}"
+            return f"Lookup error: {type(e).__name__}"
 
-    def save_results(self, records: list[tuple[str, str, str]]) -> None:
-        """Append results to the configured output Excel file as a new sheet."""
+    def save_results(self, records: list[tuple[str, str, str]]) -> str:
+        """
+        Write results to an Excel file as a 'user data' sheet.
+
+        - If the configured output file already exists: append/replace the sheet.
+        - If it does not exist but the parent directory does: create a new file there.
+        - If the parent directory also does not exist: save to the user's Desktop.
+
+        Returns the final path the file was written to.
+        """
         df = pd.DataFrame(records, columns=["Hostname", "AUUID", "Full Name"])
-        with pd.ExcelWriter(
-            self.config.output_file, engine="openpyxl", mode="a", if_sheet_exists="replace"
-        ) as writer:
+
+        target = self.config.output_file
+        if os.path.isfile(target):
+            mode = "a"
+            extra = {"if_sheet_exists": "replace"}
+        elif os.path.isdir(os.path.dirname(os.path.abspath(target))):
+            mode = "w"
+            extra = {}
+        else:
+            desktop = os.path.join(os.path.expanduser("~"), "Desktop")
+            target = os.path.join(desktop, "user_lookup_results.xlsx")
+            mode = "a" if os.path.isfile(target) else "w"
+            extra = {"if_sheet_exists": "replace"} if mode == "a" else {}
+
+        with pd.ExcelWriter(target, engine="openpyxl", mode=mode, **extra) as writer:
             df.to_excel(writer, sheet_name="user data", index=False)
+
+        return target

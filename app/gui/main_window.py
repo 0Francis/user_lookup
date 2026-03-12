@@ -161,8 +161,8 @@ class MainWindow(ttk.Frame):
             return
         try:
             extractor = UserExtractor(self.config)
-            extractor.save_results(self._records)
-            messagebox.showinfo("Exported", f"Saved to:\n{self.config.output_file}")
+            saved_to = extractor.save_results(self._records)
+            messagebox.showinfo("Exported", f"Saved to:\n{saved_to}")
         except Exception as e:
             messagebox.showerror("Export failed", str(e))
 

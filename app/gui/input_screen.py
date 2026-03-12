@@ -58,6 +58,8 @@ class InputScreen(ttk.Frame):
             self._valid[key] = False
             var.trace_add("write", lambda *_, k=key: self._schedule(k))
 
+        self.after(120, self._revalidate_prefilled)
+
         sep = ttk.Separator(self, orient="horizontal")
         sep.grid(row=len(self.FIELDS), column=0, columnspan=3, sticky="ew", pady=(14, 0))
 
@@ -68,6 +70,11 @@ class InputScreen(ttk.Frame):
         self._submit_btn.grid(
             row=len(self.FIELDS) + 1, column=0, columnspan=3, pady=(12, 0), sticky="e",
         )
+
+    def _revalidate_prefilled(self) -> None:
+        for key, var in self._vars.items():
+            if var.get().strip():
+                self._run(key)
 
     def _schedule(self, key: str) -> None:
         if key in self._timers:
