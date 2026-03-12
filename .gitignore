@@ -1,0 +1,36 @@
+# Virtual environment
+venv/
+.venv/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+
+# PyInstaller output
+build/
+dist/
+*.spec.bak
+
+# Runtime config (auto-generated, may contain local paths)
+config/settings.json
+
+# Data files — never commit source data
+data/
+
+# Assets (user-supplied — add your own splash.png and icon.ico)
+assets/splash.png
+assets/icon.ico
+
+# IDE / OS
+.vscode/
+.idea/
+*.swp
+Thumbs.db
+.DS_Store
+
+# Logs
+*.log
+
+# Jupyter checkpoints
+.ipynb_checkpoints/
