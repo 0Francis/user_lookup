@@ -9,10 +9,11 @@ import locale
 import unicodedata
 
 # CONFIG
-RAW_FILE = r"data\Kenya Offrole & CWK Dump_27 FEB.xlsx"
-SHEET_NAME = "Sheet1"
-HOSTNAME_COL = "Hostname"
-OUTPUT_FILE = "output.xlsx"
+RAW_FILE = r""
+SHEET_NAME = ""
+HOSTNAME_COL = ""
+OUTPUT_FILE = ""
+NUM_ROWS = ""
 OUTPUT_SHEET = "user data"
 
 class UserLookupGUI:
@@ -103,13 +104,11 @@ class UserLookupGUI:
     
     def load_data(self):
         try:
-            df = pd.read_excel(RAW_FILE, sheet_name=SHEET_NAME, engine="openpyxl")
-            df = df.assign(**{HOSTNAME_COL: df[HOSTNAME_COL].astype(str).str.split(r'[\n\r]+')})
-            df = df.explode(HOSTNAME_COL).reset_index(drop=True)
-            df["AUUID_digits"] = df[HOSTNAME_COL].astype(str).str.extract(r"(\d{5,})", expand=False)
-            records = df[[HOSTNAME_COL, "AUUID_digits"]].dropna().values.tolist()
-            records = [(hostname, auuid, "") for hostname, auuid in records]
-            self.display_records(records)
+            #Writing/appending data the output to an excel file
+            df = pd.DataFrame([self.tree.item(row)["values"] for row in self.tree.get_children()], columns=["Hostname", "AUUID", "Full Name"])
+            with pd.ExcelWriter(OUTPUT_FILE, engine="openpyxl", mode="a") as writer:
+                df.to_excel(writer, sheet_name=OUTPUT_SHEET, index=False)
+                
         except Exception as e:
             messagebox.showerror("Error", str(e))
     
