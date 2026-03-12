@@ -7,7 +7,7 @@ from typing import Optional
 
 def resource_path(relative: str) -> str:
     """Resolve a path that works both in development and when frozen by PyInstaller."""
-    base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+    base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     return os.path.join(base, relative)
 
 

@@ -36,14 +36,14 @@ class App:
 
     def _set_icon(self) -> None:
         try:
-            icon = resource_path("assets/icon.ico")
+            icon = resource_path("assets/splash.ico")
             self.root.iconbitmap(icon)
         except Exception:
             pass
 
     def _show_splash(self) -> None:
         self.root.withdraw()
-        image_path = resource_path("assets/splash.png")
+        image_path = resource_path("assets/splash.webp")
         splash = SplashScreen(self.root, image_path=image_path, duration=2500)
         splash.grab_set()
         self.root.after(2500, self._after_splash)
@@ -55,7 +55,7 @@ class App:
     def _show_input(self) -> None:
         self._clear_frame()
         config = AppConfig.load()
-        self.root.title(f"{self.TITLE}  —  Setup")
+        self.root.title(f"{self.TITLE} Setup")
         self.root.geometry("620x380")
         self._current_frame = InputScreen(self.root, config, on_submit=self._on_input_submit)
 

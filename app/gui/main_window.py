@@ -172,14 +172,14 @@ class MainWindow(ttk.Frame):
             self._records = records
             self.after(0, lambda: self._update_tree(records))
             self.after(0, lambda: self._status_var.set(
-                f"Done — {len(records)} record(s) resolved."
+                f"Done - {len(records)} record(s) resolved."
             ))
             self.after(0, lambda: self._export_btn.config(state="normal"))
         except ExtractionCancelledError:
             self.after(0, lambda: self._status_var.set("Cancelled."))
         except Exception as e:
             self.after(0, lambda: messagebox.showerror("Extraction error", str(e)))
-            self.after(0, lambda: self._status_var.set("Error — see dialog."))
+            self.after(0, lambda: self._status_var.set("Error - see dialog."))
         finally:
             self.after(0, lambda: self._start_btn.config(state="normal"))
             self.after(0, lambda: self._cancel_btn.config(state="disabled"))
